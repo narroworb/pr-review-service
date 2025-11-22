@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/narroworb/pr-review-service/internal/models"
@@ -57,7 +58,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	var req models.AddTeamRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
 		return
 	}
 
@@ -130,7 +131,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 
 	teamName := r.URL.Query().Get("team_name")
 	if teamName == "" {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "empty query parameter team_name", http.StatusBadRequest)
 		return
 	}
 	team, err := h.db.GetTeamByName(ctx, teamName)
@@ -140,7 +141,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "TEAM_NOT_FOUND", fmt.Sprintf("there is no team with name: %s", teamName), http.StatusNotFound)
 		return
 	}
 
@@ -166,14 +167,14 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	var req models.SetUserIsActiveRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
 		return
 	}
 
 	user, teamName, err := h.db.GetUserWithTeamByID(ctx, req.UserID)
 
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "USER_NOT_FOUND", fmt.Sprintf("there is not user with id=%s", req.UserID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -210,7 +211,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	var req models.CreatePRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
 		return
 	}
 
@@ -227,7 +228,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 
 	user, _, err := h.db.GetUserWithTeamByID(ctx, req.AuthorID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "USER_NOT_FOUND", fmt.Sprintf("there is no user with id=%s", req.AuthorID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -277,13 +278,13 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	var req models.MergePRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
 		return
 	}
 
 	pr, err := h.db.GetPRByID(ctx, req.PRID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "PR_NOT_FOUND", fmt.Sprintf("there is no pull request with id=%s", req.PRID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -328,13 +329,13 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	var req models.ReassignPRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
 		return
 	}
 
 	pr, err := h.db.GetPRByID(ctx, req.PRID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "PR_NOT_FOUND", fmt.Sprintf("there is no pull request with id=%s", req.PRID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -350,7 +351,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 
 	_, err = h.db.GetUserByID(ctx, req.OldReviewerID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "USER_NOT_FOUND", fmt.Sprintf("there is no user with id=%s", req.OldReviewerID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -368,8 +369,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
-	if (len(resp.PR.Reviewers) == 0) || (len(resp.PR.Reviewers) == 1 && resp.PR.Reviewers[0] != req.OldReviewerID) ||
-		(len(resp.PR.Reviewers) == 2 && resp.PR.Reviewers[0] != req.OldReviewerID && resp.PR.Reviewers[1] != req.OldReviewerID) {
+	if !slices.Contains(resp.PR.Reviewers, req.OldReviewerID) {
 		writeError(w, "NOT_ASSIGNED", fmt.Sprintf("reviewer with id=%s is not assigned to PR with id=%s", req.OldReviewerID, req.PRID), http.StatusConflict)
 		return
 	}
@@ -410,13 +410,13 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 
 	userID := r.URL.Query().Get("user_id")
 	if userID == "" {
-		w.WriteHeader(http.StatusBadRequest)
+		writeError(w, "BAD_REQUEST", "empty query parameter user_id", http.StatusBadRequest)
 		return
 	}
 
 	_, err := h.db.GetUserByID(ctx, userID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, "USER_NOT_FOUND", fmt.Sprintf("there is no user with id=%s", userID), http.StatusNotFound)
 		return
 	}
 	if err != nil {
