@@ -6,10 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/narroworb/pr-review-service/internal/database"
 	"github.com/narroworb/pr-review-service/internal/handlers"
+	"github.com/narroworb/pr-review-service/internal/middleware"
 )
 
 func main() {
@@ -32,6 +34,8 @@ func main() {
 	h := handlers.NewHandlersRepo(db)
 
 	r := chi.NewRouter()
+
+	r.Use(middleware.TimeoutMiddleware(3 * time.Second))
 
 	r.Post("/team/add", h.AddTeam)
 	r.Get("/team/get", h.GetTeam)
@@ -56,5 +60,4 @@ func main() {
 	<-stop
 
 	log.Println("shutting down: stopping to accept new requests...")
-
 }
