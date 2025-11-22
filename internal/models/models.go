@@ -11,7 +11,7 @@ const (
 
 type User struct {
 	ID       string `json:"user_id"`
-	Name     string `json:"name"`
+	Name     string `json:"username"`
 	IsActive bool   `json:"is_active"`
 	GroupID  int64  `json:"-"`
 }

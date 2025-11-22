@@ -18,7 +18,7 @@ type ErrorResponse struct {
 type GetTeamResponse struct {
 	Team struct {
 		Name    string `json:"team_name"`
-		Members []User
+		Members []User `json:"members"`
 	} `json:"team"`
 }
 
