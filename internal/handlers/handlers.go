@@ -40,29 +40,9 @@ func NewHandlersRepo(db DatabaseInterface) *HandlersRepo {
 	}
 }
 
-type addTeamRequest struct {
-	TeamName string `json:"team_name"`
-	Members  []struct {
-		UserID   string `json:"user_id"`
-		Name     string `json:"username"`
-		IsActive bool   `json:"is_active"`
-	} `json:"members"`
-}
-
-type addTeamResponse struct {
-	Team addTeamRequest `json:"team"`
-}
-
-type errorResponse struct {
-	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
 func serverError(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusInternalServerError)
-	var e errorResponse
+	var e models.ErrorResponse
 	e.Error.Code = "SERVER_ERROR"
 	e.Error.Message = "try again later"
 	json.NewEncoder(w).Encode(e)
@@ -71,7 +51,7 @@ func serverError(w http.ResponseWriter) {
 func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var req addTeamRequest
+	var req models.AddTeamRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -86,7 +66,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	if team.ID != 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		var e errorResponse
+		var e models.ErrorResponse
 		e.Error.Code = "TEAM_EXISTS"
 		e.Error.Message = fmt.Sprintf("team_name %s already exists", req.TeamName)
 		json.NewEncoder(w).Encode(e)
@@ -111,7 +91,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 		}
 		if user.ID != "" {
 			w.WriteHeader(http.StatusBadRequest)
-			var e errorResponse
+			var e models.ErrorResponse
 			e.Error.Code = "USER_EXISTS"
 			e.Error.Message = fmt.Sprintf("user with id=%s already belongs to another team", m.UserID)
 			json.NewEncoder(w).Encode(e)
@@ -145,15 +125,9 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(addTeamResponse{Team: req})
+	json.NewEncoder(w).Encode(models.AddTeamResponse{Team: req})
 }
 
-type getTeamResponse struct {
-	Team struct {
-		Name    string `json:"team_name"`
-		Members []models.User
-	} `json:"team"`
-}
 
 func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -174,7 +148,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp getTeamResponse
+	var resp models.GetTeamResponse
 	resp.Team.Name = team.Name
 	members, err := h.db.GetUsersInTeam(team.ID)
 	if err != nil && err != sql.ErrNoRows {
@@ -188,24 +162,12 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-type setUserIsActiveRequest struct {
-	UserID   string `json:"user_id"`
-	IsActive bool   `json:"is_active"`
-}
 
-type setUserIsActiveResponse struct {
-	User struct {
-		UserID   string `json:"user_id"`
-		Username string `json:"username"`
-		TeamName string `json:"team_name"`
-		IsActive bool   `json:"is_active"`
-	} `json:"user"`
-}
 
 func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var req setUserIsActiveRequest
+	var req models.SetUserIsActiveRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -224,7 +186,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp setUserIsActiveResponse
+	var resp models.SetUserIsActiveResponse
 	resp.User.UserID, resp.User.Username, resp.User.TeamName, resp.User.IsActive = user.ID, user.Name, teamName, req.IsActive
 
 	if user.IsActive == req.IsActive {
@@ -244,26 +206,14 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-type createPRRequest struct {
-	PRID     string `json:"pull_request_id"`
-	PRName   string `json:"pull_request_name"`
-	AuthorID string `json:"author_id"`
-}
 
-type createPRResponse struct {
-	PR struct {
-		PRID      string          `json:"pull_request_id"`
-		PRName    string          `json:"pull_request_name"`
-		AuthorID  string          `json:"author_id"`
-		Status    models.PRStatus `json:"status"`
-		Reviewers []string        `json:"assigned_reviewers"`
-	} `json:"pr"`
-}
+
+
 
 func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var req createPRRequest
+	var req models.CreatePRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -278,7 +228,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		w.WriteHeader(http.StatusBadRequest)
-		var e errorResponse
+		var e models.ErrorResponse
 		e.Error.Code = "PR_EXISTS"
 		e.Error.Message = fmt.Sprintf("PR with id=%s already exists", req.PRID)
 		json.NewEncoder(w).Encode(e)
@@ -318,7 +268,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp createPRResponse
+	var resp models.CreatePRResponse
 
 	resp.PR.PRID, resp.PR.PRName, resp.PR.AuthorID, resp.PR.Status, resp.PR.Reviewers = pr.ID, pr.Name, pr.AuthorID, pr.Status, make([]string, 0, 2)
 	for _, u := range pr.Reviewers {
@@ -329,25 +279,13 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-type mergePRRequest struct {
-	PRID string `json:"pull_request_id"`
-}
 
-type mergePRResponse struct {
-	PR struct {
-		PRID      string          `json:"pull_request_id"`
-		PRName    string          `json:"pull_request_name"`
-		AuthorID  string          `json:"author_id"`
-		Status    models.PRStatus `json:"status"`
-		Reviewers []string        `json:"assigned_reviewers"`
-		MergedAt  time.Time       `json:"mergedAt"`
-	} `json:"pr"`
-}
+
 
 func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var req mergePRRequest
+	var req models.MergePRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -365,7 +303,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp mergePRResponse
+	var resp models.MergePRResponse
 	resp.PR.PRID, resp.PR.PRName, resp.PR.AuthorID, resp.PR.Status = pr.ID, pr.Name, pr.AuthorID, pr.Status
 	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(pr.ID)
 	if err != nil {
@@ -393,26 +331,12 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-type reassignPRRequest struct {
-	PRID          string `json:"pull_request_id"`
-	OldReviewerID string `json:"old_reviewer_id"`
-}
 
-type reassignPRResponse struct {
-	PR struct {
-		PRID      string          `json:"pull_request_id"`
-		PRName    string          `json:"pull_request_name"`
-		AuthorID  string          `json:"author_id"`
-		Status    models.PRStatus `json:"status"`
-		Reviewers []string        `json:"assigned_reviewers"`
-	} `json:"pr"`
-	ReplacedBy string `json:"replaced_by"`
-}
 
 func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var req reassignPRRequest
+	var req models.ReassignPRRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -432,7 +356,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 
 	if pr.Status == models.PRStatusMerged {
 		w.WriteHeader(http.StatusConflict)
-		var e errorResponse
+		var e models.ErrorResponse
 		e.Error.Code = "PR_MERGED"
 		e.Error.Message = "cannot reassign on merged PR"
 		json.NewEncoder(w).Encode(e)
@@ -450,7 +374,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp reassignPRResponse
+	var resp models.ReassignPRResponse
 	resp.PR.PRID, resp.PR.PRName, resp.PR.AuthorID, resp.PR.Status = pr.ID, pr.Name, pr.AuthorID, pr.Status
 	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(pr.ID)
 
@@ -462,7 +386,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	if (len(resp.PR.Reviewers) == 0) || (len(resp.PR.Reviewers) == 1 && resp.PR.Reviewers[0] != req.OldReviewerID) ||
 		(len(resp.PR.Reviewers) == 2 && resp.PR.Reviewers[0] != req.OldReviewerID && resp.PR.Reviewers[1] != req.OldReviewerID) {
 		w.WriteHeader(http.StatusConflict)
-		var e errorResponse
+		var e models.ErrorResponse
 		e.Error.Code = "NOT_ASSIGNED"
 		e.Error.Message = fmt.Sprintf("reviewer with id=%s is not assigned to PR with id=%s", req.OldReviewerID, req.PRID)
 		json.NewEncoder(w).Encode(e)
@@ -472,7 +396,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	availableReviewerID, err := h.db.FoundAvailableReviewerPR(req.PRID, resp.PR.Reviewers, resp.PR.AuthorID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusConflict)
-		var e errorResponse
+		var e models.ErrorResponse
 		e.Error.Code = "NO_CANDIDATE"
 		e.Error.Message = "no active replacement candidate in team"
 		json.NewEncoder(w).Encode(e)
@@ -502,10 +426,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-type getReviewResponse struct {
-	UserID string               `json:"user_id"`
-	PR     []models.PullRequest `json:"pull_requests"`
-}
+
 
 func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -529,12 +450,12 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 
 	prs, err := h.db.GetPRByReviewerID(userID)
 	if err != nil && err != sql.ErrNoRows {
-		log.Printf("error in get user in handler /users/setIsActive: %v", err)
+		log.Printf("error in get pr in handler /users/setIsActive: %v", err)
 		serverError(w)
 		return
 	}
 
-	var resp getReviewResponse
+	var resp models.GetReviewResponse
 	resp.UserID = userID
 	resp.PR = prs
 
