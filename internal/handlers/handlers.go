@@ -41,11 +41,11 @@ func NewHandlersRepo(db DatabaseInterface) *HandlersRepo {
 	}
 }
 
-func serverError(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusInternalServerError)
+func writeError(w http.ResponseWriter, code, message string, statusCode int) {
+	w.WriteHeader(statusCode)
 	var e models.ErrorResponse
-	e.Error.Code = "SERVER_ERROR"
-	e.Error.Message = "try again later"
+	e.Error.Code = code
+	e.Error.Message = message
 	json.NewEncoder(w).Encode(e)
 }
 
@@ -64,15 +64,11 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	team, err := h.db.GetTeamByName(ctx, req.TeamName)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get team in handler /team/add: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	if team.ID != 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		var e models.ErrorResponse
-		e.Error.Code = "TEAM_EXISTS"
-		e.Error.Message = fmt.Sprintf("team_name %s already exists", req.TeamName)
-		json.NewEncoder(w).Encode(e)
+		writeError(w, "TEAM_EXISTS", fmt.Sprintf("team_name %s already exists", req.TeamName), http.StatusBadRequest)
 		return
 	}
 
@@ -89,15 +85,11 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 		user, err := h.db.GetUserByID(ctx, m.UserID)
 		if err != nil && err != sql.ErrNoRows {
 			log.Printf("error in get user in handler /team/add: %v", err)
-			serverError(w)
+			writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 			return
 		}
 		if user.ID != "" {
-			w.WriteHeader(http.StatusBadRequest)
-			var e models.ErrorResponse
-			e.Error.Code = "USER_EXISTS"
-			e.Error.Message = fmt.Sprintf("user with id=%s already belongs to another team", m.UserID)
-			json.NewEncoder(w).Encode(e)
+			writeError(w, "USER_EXISTS", fmt.Sprintf("user with id=%s already belongs to another team", m.UserID), http.StatusBadRequest)
 			return
 		}
 
@@ -123,7 +115,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.InsertTeamInTransaction(ctx, req.TeamName, users); err != nil {
 		log.Printf("error in apply transaction to create team in handler /team/add: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -144,7 +136,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	team, err := h.db.GetTeamByName(ctx, teamName)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get team in handler /team/get/%s: %v", teamName, err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	if err == sql.ErrNoRows {
@@ -157,7 +149,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	members, err := h.db.GetUsersInTeam(ctx, team.ID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get users in handler /team/get/%s: %v", teamName, err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	resp.Team.Members = members
@@ -186,7 +178,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get user in handler /users/setIsActive: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -202,7 +194,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	err = h.db.UpdateUserActivity(ctx, user.ID, req.IsActive)
 	if err != nil {
 		log.Printf("error in update user in handler /users/setIsActive: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -225,15 +217,11 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	_, err := h.db.GetPRByID(ctx, req.PRID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in create pr in handler /pullRequest/create: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	if err == nil {
-		w.WriteHeader(http.StatusBadRequest)
-		var e models.ErrorResponse
-		e.Error.Code = "PR_EXISTS"
-		e.Error.Message = fmt.Sprintf("PR with id=%s already exists", req.PRID)
-		json.NewEncoder(w).Encode(e)
+		writeError(w, "PR_EXISTS", fmt.Sprintf("PR with id=%s already exists", req.PRID), http.StatusBadRequest)
 		return
 	}
 
@@ -244,14 +232,14 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get user in handler /pullRequest/create: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
 	reviewers, err := h.db.GetActiveUsersInTeamExcAuthor(ctx, user.GroupID, user.ID)
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/create: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -266,7 +254,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	err = h.db.InsertPRInTransaction(ctx, pr)
 	if err != nil {
 		log.Printf("error in insert pr in handler /pullRequest/create: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -300,7 +288,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get pr in handler /pullRequest/merge: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -309,7 +297,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(ctx, pr.ID)
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/merge: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -323,7 +311,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	resp.PR.MergedAt, err = h.db.SetMergedStatusPR(ctx, pr.ID)
 	if err != nil {
 		log.Printf("error in update status in handler /pullRequest/merge: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	resp.PR.Status = models.PRStatusMerged
@@ -351,16 +339,12 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get pr in handler /pullRequest/reassign: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
 	if pr.Status == models.PRStatusMerged {
-		w.WriteHeader(http.StatusConflict)
-		var e models.ErrorResponse
-		e.Error.Code = "PR_MERGED"
-		e.Error.Message = "cannot reassign on merged PR"
-		json.NewEncoder(w).Encode(e)
+		writeError(w, "PR_MERGED", "cannot reassign on merged PR", http.StatusConflict)
 		return
 	}
 
@@ -371,7 +355,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get user in handler /pullRequest/reassign: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -381,38 +365,30 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/reassign: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 	if (len(resp.PR.Reviewers) == 0) || (len(resp.PR.Reviewers) == 1 && resp.PR.Reviewers[0] != req.OldReviewerID) ||
 		(len(resp.PR.Reviewers) == 2 && resp.PR.Reviewers[0] != req.OldReviewerID && resp.PR.Reviewers[1] != req.OldReviewerID) {
-		w.WriteHeader(http.StatusConflict)
-		var e models.ErrorResponse
-		e.Error.Code = "NOT_ASSIGNED"
-		e.Error.Message = fmt.Sprintf("reviewer with id=%s is not assigned to PR with id=%s", req.OldReviewerID, req.PRID)
-		json.NewEncoder(w).Encode(e)
+		writeError(w, "NOT_ASSIGNED", fmt.Sprintf("reviewer with id=%s is not assigned to PR with id=%s", req.OldReviewerID, req.PRID), http.StatusConflict)
 		return
 	}
 
 	availableReviewerID, err := h.db.FoundAvailableReviewerPR(ctx, req.PRID, resp.PR.Reviewers, resp.PR.AuthorID)
 	if err == sql.ErrNoRows {
-		w.WriteHeader(http.StatusConflict)
-		var e models.ErrorResponse
-		e.Error.Code = "NO_CANDIDATE"
-		e.Error.Message = "no active replacement candidate in team"
-		json.NewEncoder(w).Encode(e)
+		writeError(w, "NO_CANDIDATE", "no active replacement candidate in team", http.StatusConflict)
 		return
 	}
 	if err != nil {
 		log.Printf("error in found available reviewer in handler /pullRequest/reassign: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
 	err = h.db.SwapReviewerInPR(ctx, req.PRID, req.OldReviewerID, availableReviewerID)
 	if err != nil {
 		log.Printf("error in update reviewer in handler /pullRequest/reassign: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
@@ -445,14 +421,14 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error in get user in handler /users/setIsActive: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
 	prs, err := h.db.GetPRByReviewerID(ctx, userID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get pr in handler /users/setIsActive: %v", err)
-		serverError(w)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
 
