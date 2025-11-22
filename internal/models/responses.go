@@ -67,3 +67,15 @@ type GetReviewResponse struct {
 	UserID string        `json:"user_id"`
 	PR     []PullRequest `json:"pull_requests"`
 }
+
+type GetStatsUsersResponse struct {
+	PRStats []UserStats `json:"statistic"`
+}
+
+type GetStatsTeamsResponse struct {
+	PRStats []TeamStats `json:"statistic"`
+}
+
+type GetStatsPRsResponse struct {
+	PRStats map[string]int64 `json:"statistic"`
+}

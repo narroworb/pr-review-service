@@ -166,7 +166,7 @@ func (p *PostgresDB) GetPRByID(ctx context.Context, pRID string) (models.PullReq
 func (p *PostgresDB) GetActiveUsersInTeamExcAuthor(ctx context.Context, teamID int64, userID string) ([]models.User, error) {
 	r, err := p.db.QueryContext(ctx, `WITH pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
  		SELECT user_id, name, is_active, team_id FROM users LEFT JOIN pr_count ON users.user_id=pr_count.reviewer_id
- 		WHERE user_id!=$1 AND is_active AND team_id=$2 ORDER BY cnt LIMIT 2;`,
+ 		WHERE user_id!=$1 AND is_active AND team_id=$2 ORDER BY COALESCE(cnt, 0) LIMIT 2;`,
 		userID, teamID)
 
 	if err != nil {
@@ -277,4 +277,93 @@ func (p *PostgresDB) GetPRByReviewerID(ctx context.Context, reviewerID string) (
 	}
 
 	return pullrequests, nil
+}
+
+func (p *PostgresDB) GetCountPRStatsByUser(ctx context.Context) ([]models.UserStats, error) {
+	r, err := p.db.QueryContext(ctx,
+		`SELECT u.user_id, COALESCE(a.cnt_author, 0) AS cnt_author,
+			COALESCE(r.cnt_reviewer, 0) AS cnt_reviewer
+		FROM users u
+		LEFT JOIN (
+			SELECT author_id, COUNT(*) AS cnt_author
+			FROM pull_requests
+			GROUP BY author_id
+		) a ON u.user_id = a.author_id
+		LEFT JOIN (
+			SELECT reviewer_id, COUNT(*) AS cnt_reviewer
+			FROM pull_requests_reviewers
+			GROUP BY reviewer_id
+		) r ON u.user_id = r.reviewer_id
+		ORDER BY cnt_author DESC;
+	`)
+	if err != nil {
+		return nil, err
+	}
+	stats := make([]models.UserStats, 0, 10)
+
+	for r.Next() {
+		var s models.UserStats
+		if err := r.Scan(&s.UserID, &s.PRAuthorCount, &s.PRReviewerCount); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, nil
+}
+
+func (p *PostgresDB) GetCountPRStatsByTeam(ctx context.Context) ([]models.TeamStats, error) {
+	r, err := p.db.QueryContext(ctx,
+		`SELECT
+			t.name,
+			COUNT(DISTINCT u.user_id) AS users_count,
+			COUNT(pr.pr_id) AS total_pr,
+			COUNT(pr.pr_id) FILTER (WHERE pr.pr_status = 'OPEN')  AS open_pr,
+			COUNT(pr.pr_id) FILTER (WHERE pr.pr_status = 'MERGED') AS merged_pr
+		FROM teams t
+		LEFT JOIN users u ON u.team_id = t.team_id
+		LEFT JOIN pull_requests pr ON pr.author_id = u.user_id
+		GROUP BY t.name
+		ORDER BY t.name;
+		`)
+	if err != nil {
+		return nil, err
+	}
+	stats := make([]models.TeamStats, 0, 10)
+
+	for r.Next() {
+		var s models.TeamStats
+		if err := r.Scan(&s.TeamName, &s.UsersCount, &s.AllPRCount, &s.OpenPRCount, &s.MergedPRCount); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, nil
+}
+
+func (p *PostgresDB) GetCountReviewerStatsByPR(ctx context.Context) (map[string]int64, error) {
+	r, err := p.db.QueryContext(ctx,
+		`SELECT
+			pr_id,
+			COUNT(*) AS reviewers_count
+		FROM pull_requests_reviewers
+		GROUP BY pr_id
+		ORDER BY pr_id;
+		`)
+	if err != nil {
+		return nil, err
+	}
+	stats := make(map[string]int64)
+
+	for r.Next() {
+		var pr_id string
+		var count int64
+		if err := r.Scan(&pr_id, &count); err != nil {
+			return nil, err
+		}
+		stats[pr_id] = count
+	}
+
+	return stats, nil
 }

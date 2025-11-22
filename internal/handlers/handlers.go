@@ -30,6 +30,9 @@ type DatabaseInterface interface {
 	FoundAvailableReviewerPR(context.Context, string, []string, string) (string, error)
 	SwapReviewerInPR(context.Context, string, string, string) error
 	GetPRByReviewerID(context.Context, string) ([]models.PullRequest, error)
+	GetCountPRStatsByUser(context.Context) ([]models.UserStats, error)
+	GetCountPRStatsByTeam(context.Context) ([]models.TeamStats, error)
+	GetCountReviewerStatsByPR(context.Context) (map[string]int64, error)
 }
 
 type HandlersRepo struct {
@@ -136,7 +139,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	team, err := h.db.GetTeamByName(ctx, teamName)
 	if err != nil && err != sql.ErrNoRows {
-		log.Printf("error in get team in handler /team/get/%s: %v", teamName, err)
+		log.Printf("error in get team in handler /team/get?team_name=%s: %v", teamName, err)
 		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
@@ -149,7 +152,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	resp.Team.Name = team.Name
 	members, err := h.db.GetUsersInTeam(ctx, team.ID)
 	if err != nil && err != sql.ErrNoRows {
-		log.Printf("error in get users in handler /team/get/%s: %v", teamName, err)
+		log.Printf("error in get users in handler /team/get?team_name=%s: %v", teamName, err)
 		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
@@ -435,6 +438,62 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 	var resp models.GetReviewResponse
 	resp.UserID = userID
 	resp.PR = prs
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *HandlersRepo) GetStatsByUsers(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+
+	stats, err := h.db.GetCountPRStatsByUser(ctx)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in get stats in handler /stats/users: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+
+	var resp models.GetStatsUsersResponse
+	resp.PRStats = stats
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *HandlersRepo) GetStatsByTeams(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+
+	stats, err := h.db.GetCountPRStatsByTeam(ctx)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in get stats in handler /stats/users: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+
+	var resp models.GetStatsTeamsResponse
+	resp.PRStats = stats
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *HandlersRepo) GetStatsByPRs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+
+	stats, err := h.db.GetCountReviewerStatsByPR(ctx)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in get stats in handler /stats/users: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+
+	resp := models.GetStatsPRsResponse{
+		PRStats: stats,
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)

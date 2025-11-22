@@ -47,6 +47,10 @@ func main() {
 	r.Post("/pullRequest/merge", h.MergePR)
 	r.Post("/pullRequest/reassign", h.ReassignPR)
 
+	r.Get("/stats/users", h.GetStatsByUsers)
+	r.Get("/stats/teams", h.GetStatsByTeams)
+	r.Get("/stats/pullRequests", h.GetStatsByPRs)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
