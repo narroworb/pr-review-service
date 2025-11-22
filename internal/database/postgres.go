@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 	"github.com/narroworb/pr-review-service/internal/models"
 )
 
@@ -52,8 +52,8 @@ func (p *PostgresDB) RunMigrations() error {
 	return nil
 }
 
-func (p *PostgresDB) GetTeamByName(teamName string) (models.Team, error) {
-	r := p.db.QueryRow("SELECT team_id, name FROM teams WHERE name=$1", teamName)
+func (p *PostgresDB) GetTeamByName(ctx context.Context, teamName string) (models.Team, error) {
+	r := p.db.QueryRowContext(ctx, "SELECT team_id, name FROM teams WHERE name=$1", teamName)
 
 	var team models.Team
 
@@ -63,8 +63,8 @@ func (p *PostgresDB) GetTeamByName(teamName string) (models.Team, error) {
 	return team, nil
 }
 
-func (p *PostgresDB) CreateTeam(teamName string) (int64, error) {
-	r := p.db.QueryRow("INSERT INTO teams (name) VALUES ($1) RETURNING team_id", teamName)
+func (p *PostgresDB) CreateTeam(ctx context.Context, teamName string) (int64, error) {
+	r := p.db.QueryRowContext(ctx, "INSERT INTO teams (name) VALUES ($1) RETURNING team_id", teamName)
 
 	var teamID int64
 
@@ -74,8 +74,8 @@ func (p *PostgresDB) CreateTeam(teamName string) (int64, error) {
 	return teamID, nil
 }
 
-func (p *PostgresDB) GetUserByID(userID string) (models.User, error) {
-	r := p.db.QueryRow("SELECT user_id, name, is_active, team_id FROM users WHERE user_id=$1", userID)
+func (p *PostgresDB) GetUserByID(ctx context.Context, userID string) (models.User, error) {
+	r := p.db.QueryRowContext(ctx, "SELECT user_id, name, is_active, team_id FROM users WHERE user_id=$1", userID)
 
 	var user models.User
 
@@ -85,13 +85,13 @@ func (p *PostgresDB) GetUserByID(userID string) (models.User, error) {
 	return user, nil
 }
 
-func (p *PostgresDB) CreateUser(user models.User) error {
-	_, err := p.db.Exec("INSERT INTO users (user_id, name, is_active, team_id) VALUES ($1, $2, $3, $4)", user.ID, user.Name, user.IsActive, user.GroupID)
+func (p *PostgresDB) CreateUser(ctx context.Context, user models.User) error {
+	_, err := p.db.ExecContext(ctx, "INSERT INTO users (user_id, name, is_active, team_id) VALUES ($1, $2, $3, $4)", user.ID, user.Name, user.IsActive, user.GroupID)
 	return err
 }
 
-func (p *PostgresDB) GetUsersInTeam(teamID int64) ([]models.User, error) {
-	r, err := p.db.Query("SELECT user_id, name, is_active, team_id FROM users WHERE team_id=$1", teamID)
+func (p *PostgresDB) GetUsersInTeam(ctx context.Context, teamID int64) ([]models.User, error) {
+	r, err := p.db.QueryContext(ctx, "SELECT user_id, name, is_active, team_id FROM users WHERE team_id=$1", teamID)
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +111,13 @@ func (p *PostgresDB) GetUsersInTeam(teamID int64) ([]models.User, error) {
 	return users, nil
 }
 
-func (p *PostgresDB) InsertTeamInTransaction(teamName string, users []models.User) error {
-	t, err := p.db.Begin()
+func (p *PostgresDB) InsertTeamInTransaction(ctx context.Context, teamName string, users []models.User) error {
+	t, err := p.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return err
 	}
 
-	r := t.QueryRow("INSERT INTO teams (name) VALUES ($1) RETURNING team_id", teamName)
+	r := t.QueryRowContext(ctx, "INSERT INTO teams (name) VALUES ($1) RETURNING team_id", teamName)
 	var teamID int64
 	if err := r.Scan(&teamID); err != nil {
 		t.Rollback()
@@ -125,7 +125,7 @@ func (p *PostgresDB) InsertTeamInTransaction(teamName string, users []models.Use
 	}
 
 	for _, user := range users {
-		_, err := t.Exec("INSERT INTO users (user_id, name, is_active, team_id) VALUES ($1, $2, $3, $4)", user.ID, user.Name, user.IsActive, teamID)
+		_, err := t.ExecContext(ctx, "INSERT INTO users (user_id, name, is_active, team_id) VALUES ($1, $2, $3, $4)", user.ID, user.Name, user.IsActive, teamID)
 		if err != nil {
 			t.Rollback()
 			return err
@@ -135,8 +135,8 @@ func (p *PostgresDB) InsertTeamInTransaction(teamName string, users []models.Use
 	return t.Commit()
 }
 
-func (p *PostgresDB) GetUserWithTeamByID(userID string) (models.User, string, error) {
-	r := p.db.QueryRow("SELECT user_id, users.name, is_active, users.team_id, teams.name FROM users INNER JOIN teams ON users.team_id=teams.team_id WHERE user_id=$1", userID)
+func (p *PostgresDB) GetUserWithTeamByID(ctx context.Context, userID string) (models.User, string, error) {
+	r := p.db.QueryRowContext(ctx, "SELECT user_id, users.name, is_active, users.team_id, teams.name FROM users INNER JOIN teams ON users.team_id=teams.team_id WHERE user_id=$1", userID)
 
 	var user models.User
 	var teamName string
@@ -147,13 +147,13 @@ func (p *PostgresDB) GetUserWithTeamByID(userID string) (models.User, string, er
 	return user, teamName, nil
 }
 
-func (p *PostgresDB) UpdateUserActivity(userID string, isActive bool) error {
-	_, err := p.db.Exec("UPDATE users SET is_active=$1 WHERE user_id=$2", isActive, userID)
+func (p *PostgresDB) UpdateUserActivity(ctx context.Context, userID string, isActive bool) error {
+	_, err := p.db.ExecContext(ctx, "UPDATE users SET is_active=$1 WHERE user_id=$2", isActive, userID)
 	return err
 }
 
-func (p *PostgresDB) GetPRByID(pRID string) (models.PullRequest, error) {
-	r := p.db.QueryRow("SELECT pr_id, name, author_id, pr_status, merged_at FROM pull_requests WHERE pr_id=$1", pRID)
+func (p *PostgresDB) GetPRByID(ctx context.Context, pRID string) (models.PullRequest, error) {
+	r := p.db.QueryRowContext(ctx, "SELECT pr_id, name, author_id, pr_status, merged_at FROM pull_requests WHERE pr_id=$1", pRID)
 
 	var pr models.PullRequest
 
@@ -163,8 +163,8 @@ func (p *PostgresDB) GetPRByID(pRID string) (models.PullRequest, error) {
 	return pr, nil
 }
 
-func (p *PostgresDB) GetActiveUsersInTeamExcAuthor(teamID int64, userID string) ([]models.User, error) {
-	r, err := p.db.Query(`WITH pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
+func (p *PostgresDB) GetActiveUsersInTeamExcAuthor(ctx context.Context, teamID int64, userID string) ([]models.User, error) {
+	r, err := p.db.QueryContext(ctx, `WITH pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
  		SELECT user_id, name, is_active, team_id FROM users LEFT JOIN pr_count ON users.user_id=pr_count.reviewer_id
  		WHERE user_id!=$1 AND is_active AND team_id=$2 ORDER BY cnt LIMIT 2;`,
 		userID, teamID)
@@ -187,20 +187,20 @@ func (p *PostgresDB) GetActiveUsersInTeamExcAuthor(teamID int64, userID string) 
 	return reviewers, nil
 }
 
-func (p *PostgresDB) InsertPRInTransaction(pr models.PullRequest) error {
-	t, err := p.db.Begin()
+func (p *PostgresDB) InsertPRInTransaction(ctx context.Context, pr models.PullRequest) error {
+	t, err := p.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return err
 	}
 
-	_, err = t.Exec("INSERT INTO pull_requests (pr_id, name, author_id, pr_status) VALUES ($1, $2, $3, $4)", pr.ID, pr.Name, pr.AuthorID, pr.Status)
+	_, err = t.ExecContext(ctx, "INSERT INTO pull_requests (pr_id, name, author_id, pr_status) VALUES ($1, $2, $3, $4)", pr.ID, pr.Name, pr.AuthorID, pr.Status)
 	if err != nil {
 		t.Rollback()
 		return err
 	}
 
 	for _, reviewer := range pr.Reviewers {
-		_, err := t.Exec("INSERT INTO pull_requests_reviewers (pr_id, reviewer_id) VALUES ($1, $2)", pr.ID, reviewer.ID)
+		_, err := t.ExecContext(ctx, "INSERT INTO pull_requests_reviewers (pr_id, reviewer_id) VALUES ($1, $2)", pr.ID, reviewer.ID)
 		if err != nil {
 			t.Rollback()
 			return err
@@ -210,8 +210,8 @@ func (p *PostgresDB) InsertPRInTransaction(pr models.PullRequest) error {
 	return t.Commit()
 }
 
-func (p *PostgresDB) GetReviewersByPRID(pRID string) ([]string, error) {
-	r, err := p.db.Query("SELECT reviewer_id FROM pull_requests_reviewers WHERE pr_id=$1", pRID)
+func (p *PostgresDB) GetReviewersByPRID(ctx context.Context, pRID string) ([]string, error) {
+	r, err := p.db.QueryContext(ctx, "SELECT reviewer_id FROM pull_requests_reviewers WHERE pr_id=$1", pRID)
 	if err != nil {
 		return nil, err
 	}
@@ -228,8 +228,8 @@ func (p *PostgresDB) GetReviewersByPRID(pRID string) ([]string, error) {
 	return reviewersID, nil
 }
 
-func (p *PostgresDB) SetMergedStatusPR(pRID string) (time.Time, error) {
-	r := p.db.QueryRow(`UPDATE pull_requests SET pr_status=$1, merged_at=NOW() WHERE pr_id=$2 RETURNING merged_at`, models.PRStatusMerged, pRID)
+func (p *PostgresDB) SetMergedStatusPR(ctx context.Context, pRID string) (time.Time, error) {
+	r := p.db.QueryRowContext(ctx, `UPDATE pull_requests SET pr_status=$1, merged_at=NOW() WHERE pr_id=$2 RETURNING merged_at`, models.PRStatusMerged, pRID)
 
 	var mergedAt time.Time
 	if err := r.Scan(&mergedAt); err != nil {
@@ -239,8 +239,8 @@ func (p *PostgresDB) SetMergedStatusPR(pRID string) (time.Time, error) {
 	return mergedAt, nil
 }
 
-func (p *PostgresDB) FoundAvailableReviewerPR(pRID string, reviewersID []string, authorID string) (string, error) {
-	r := p.db.QueryRow(`WITH team AS (SELECT team_id FROM users u INNER JOIN pull_requests pr ON pr.author_id=u.user_id WHERE pr.pr_id=$1),
+func (p *PostgresDB) FoundAvailableReviewerPR(ctx context.Context, pRID string, reviewersID []string, authorID string) (string, error) {
+	r := p.db.QueryRowContext(ctx, `WITH team AS (SELECT team_id FROM users u INNER JOIN pull_requests pr ON pr.author_id=u.user_id WHERE pr.pr_id=$1),
 	pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
 	SELECT user_id FROM users u INNER JOIN team t ON u.team_id=t.team_id 
 	LEFT JOIN pr_count prc ON prc.reviewer_id=u.user_id 
@@ -253,13 +253,13 @@ func (p *PostgresDB) FoundAvailableReviewerPR(pRID string, reviewersID []string,
 	return reviewerID, nil
 }
 
-func (p *PostgresDB) SwapReviewerInPR(pRID, oldReviewerID, newReviewerID string) error {
-	_, err := p.db.Exec(`UPDATE pull_requests_reviewers SET reviewer_id=$1 WHERE pr_id=$2 AND reviewer_id=$3`, newReviewerID, pRID, oldReviewerID)
+func (p *PostgresDB) SwapReviewerInPR(ctx context.Context, pRID, oldReviewerID, newReviewerID string) error {
+	_, err := p.db.ExecContext(ctx, `UPDATE pull_requests_reviewers SET reviewer_id=$1 WHERE pr_id=$2 AND reviewer_id=$3`, newReviewerID, pRID, oldReviewerID)
 	return err
 }
 
-func (p *PostgresDB) GetPRByReviewerID(reviewerID string) ([]models.PullRequest, error) {
-	r, err := p.db.Query(`SELECT pr.pr_id, name, author_id, pr_status FROM pull_requests_reviewers prr 
+func (p *PostgresDB) GetPRByReviewerID(ctx context.Context, reviewerID string) ([]models.PullRequest, error) {
+	r, err := p.db.QueryContext(ctx, `SELECT pr.pr_id, name, author_id, pr_status FROM pull_requests_reviewers prr 
 	INNER JOIN pull_requests pr 
 	ON prr.pr_id=pr.pr_id
 	WHERE reviewer_id=$1`, reviewerID)

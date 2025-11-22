@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -12,22 +13,22 @@ import (
 )
 
 type DatabaseInterface interface {
-	GetTeamByName(string) (models.Team, error)
-	CreateTeam(string) (int64, error)
-	GetUserByID(string) (models.User, error)
-	CreateUser(models.User) error
-	GetUsersInTeam(int64) ([]models.User, error)
-	InsertTeamInTransaction(string, []models.User) error
-	GetUserWithTeamByID(string) (models.User, string, error)
-	UpdateUserActivity(string, bool) error
-	GetPRByID(string) (models.PullRequest, error)
-	GetActiveUsersInTeamExcAuthor(int64, string) ([]models.User, error)
-	InsertPRInTransaction(models.PullRequest) error
-	GetReviewersByPRID(string) ([]string, error)
-	SetMergedStatusPR(string) (time.Time, error)
-	FoundAvailableReviewerPR(string, []string, string) (string, error)
-	SwapReviewerInPR(string, string, string) error
-	GetPRByReviewerID(string) ([]models.PullRequest, error)
+	GetTeamByName(context.Context, string) (models.Team, error)
+	CreateTeam(context.Context, string) (int64, error)
+	GetUserByID(context.Context, string) (models.User, error)
+	CreateUser(context.Context, models.User) error
+	GetUsersInTeam(context.Context, int64) ([]models.User, error)
+	InsertTeamInTransaction(context.Context, string, []models.User) error
+	GetUserWithTeamByID(context.Context, string) (models.User, string, error)
+	UpdateUserActivity(context.Context, string, bool) error
+	GetPRByID(context.Context, string) (models.PullRequest, error)
+	GetActiveUsersInTeamExcAuthor(context.Context, int64, string) ([]models.User, error)
+	InsertPRInTransaction(context.Context, models.PullRequest) error
+	GetReviewersByPRID(context.Context, string) ([]string, error)
+	SetMergedStatusPR(context.Context, string) (time.Time, error)
+	FoundAvailableReviewerPR(context.Context, string, []string, string) (string, error)
+	SwapReviewerInPR(context.Context, string, string, string) error
+	GetPRByReviewerID(context.Context, string) ([]models.PullRequest, error)
 }
 
 type HandlersRepo struct {
@@ -51,6 +52,8 @@ func serverError(w http.ResponseWriter) {
 func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	ctx := r.Context()
+
 	var req models.AddTeamRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -58,7 +61,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	team, err := h.db.GetTeamByName(req.TeamName)
+	team, err := h.db.GetTeamByName(ctx, req.TeamName)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get team in handler /team/add: %v", err)
 		serverError(w)
@@ -83,7 +86,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	users := make([]models.User, 0, len(req.Members))
 
 	for _, m := range req.Members {
-		user, err := h.db.GetUserByID(m.UserID)
+		user, err := h.db.GetUserByID(ctx, m.UserID)
 		if err != nil && err != sql.ErrNoRows {
 			log.Printf("error in get user in handler /team/add: %v", err)
 			serverError(w)
@@ -118,7 +121,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 		// }
 	}
 
-	if err := h.db.InsertTeamInTransaction(req.TeamName, users); err != nil {
+	if err := h.db.InsertTeamInTransaction(ctx, req.TeamName, users); err != nil {
 		log.Printf("error in apply transaction to create team in handler /team/add: %v", err)
 		serverError(w)
 		return
@@ -128,16 +131,17 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(models.AddTeamResponse{Team: req})
 }
 
-
 func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	teamName := r.URL.Query().Get("team_name")
 	if teamName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	team, err := h.db.GetTeamByName(teamName)
+	team, err := h.db.GetTeamByName(ctx, teamName)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get team in handler /team/get/%s: %v", teamName, err)
 		serverError(w)
@@ -150,7 +154,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 
 	var resp models.GetTeamResponse
 	resp.Team.Name = team.Name
-	members, err := h.db.GetUsersInTeam(team.ID)
+	members, err := h.db.GetUsersInTeam(ctx, team.ID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get users in handler /team/get/%s: %v", teamName, err)
 		serverError(w)
@@ -162,10 +166,10 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
-
 func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	var req models.SetUserIsActiveRequest
 
@@ -174,7 +178,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, teamName, err := h.db.GetUserWithTeamByID(req.UserID)
+	user, teamName, err := h.db.GetUserWithTeamByID(ctx, req.UserID)
 
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
@@ -195,7 +199,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.db.UpdateUserActivity(user.ID, req.IsActive)
+	err = h.db.UpdateUserActivity(ctx, user.ID, req.IsActive)
 	if err != nil {
 		log.Printf("error in update user in handler /users/setIsActive: %v", err)
 		serverError(w)
@@ -206,12 +210,10 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
-
-
-
 func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	var req models.CreatePRRequest
 
@@ -220,7 +222,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.db.GetPRByID(req.PRID)
+	_, err := h.db.GetPRByID(ctx, req.PRID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in create pr in handler /pullRequest/create: %v", err)
 		serverError(w)
@@ -235,7 +237,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, _, err := h.db.GetUserWithTeamByID(req.AuthorID)
+	user, _, err := h.db.GetUserWithTeamByID(ctx, req.AuthorID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -246,7 +248,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reviewers, err := h.db.GetActiveUsersInTeamExcAuthor(user.GroupID, user.ID)
+	reviewers, err := h.db.GetActiveUsersInTeamExcAuthor(ctx, user.GroupID, user.ID)
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/create: %v", err)
 		serverError(w)
@@ -261,7 +263,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		Reviewers: reviewers,
 	}
 
-	err = h.db.InsertPRInTransaction(pr)
+	err = h.db.InsertPRInTransaction(ctx, pr)
 	if err != nil {
 		log.Printf("error in insert pr in handler /pullRequest/create: %v", err)
 		serverError(w)
@@ -279,11 +281,10 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
-
-
 func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	var req models.MergePRRequest
 
@@ -292,7 +293,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr, err := h.db.GetPRByID(req.PRID)
+	pr, err := h.db.GetPRByID(ctx, req.PRID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -305,7 +306,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 
 	var resp models.MergePRResponse
 	resp.PR.PRID, resp.PR.PRName, resp.PR.AuthorID, resp.PR.Status = pr.ID, pr.Name, pr.AuthorID, pr.Status
-	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(pr.ID)
+	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(ctx, pr.ID)
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/merge: %v", err)
 		serverError(w)
@@ -319,7 +320,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp.PR.MergedAt, err = h.db.SetMergedStatusPR(pr.ID)
+	resp.PR.MergedAt, err = h.db.SetMergedStatusPR(ctx, pr.ID)
 	if err != nil {
 		log.Printf("error in update status in handler /pullRequest/merge: %v", err)
 		serverError(w)
@@ -331,10 +332,10 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
-
 func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	var req models.ReassignPRRequest
 
@@ -343,7 +344,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pr, err := h.db.GetPRByID(req.PRID)
+	pr, err := h.db.GetPRByID(ctx, req.PRID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -363,7 +364,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.db.GetUserByID(req.OldReviewerID)
+	_, err = h.db.GetUserByID(ctx, req.OldReviewerID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -376,7 +377,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 
 	var resp models.ReassignPRResponse
 	resp.PR.PRID, resp.PR.PRName, resp.PR.AuthorID, resp.PR.Status = pr.ID, pr.Name, pr.AuthorID, pr.Status
-	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(pr.ID)
+	resp.PR.Reviewers, err = h.db.GetReviewersByPRID(ctx, pr.ID)
 
 	if err != nil {
 		log.Printf("error in get reviewers in handler /pullRequest/reassign: %v", err)
@@ -393,7 +394,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	availableReviewerID, err := h.db.FoundAvailableReviewerPR(req.PRID, resp.PR.Reviewers, resp.PR.AuthorID)
+	availableReviewerID, err := h.db.FoundAvailableReviewerPR(ctx, req.PRID, resp.PR.Reviewers, resp.PR.AuthorID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusConflict)
 		var e models.ErrorResponse
@@ -408,7 +409,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.db.SwapReviewerInPR(req.PRID, req.OldReviewerID, availableReviewerID)
+	err = h.db.SwapReviewerInPR(ctx, req.PRID, req.OldReviewerID, availableReviewerID)
 	if err != nil {
 		log.Printf("error in update reviewer in handler /pullRequest/reassign: %v", err)
 		serverError(w)
@@ -426,10 +427,10 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-
-
 func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
 
 	userID := r.URL.Query().Get("user_id")
 	if userID == "" {
@@ -437,7 +438,7 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.db.GetUserByID(userID)
+	_, err := h.db.GetUserByID(ctx, userID)
 	if err == sql.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -448,7 +449,7 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prs, err := h.db.GetPRByReviewerID(userID)
+	prs, err := h.db.GetPRByReviewerID(ctx, userID)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("error in get pr in handler /users/setIsActive: %v", err)
 		serverError(w)
