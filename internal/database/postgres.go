@@ -3,10 +3,13 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 	"github.com/narroworb/pr-review-service/internal/models"
 )
 
@@ -130,4 +133,148 @@ func (p *PostgresDB) InsertTeamInTransaction(teamName string, users []models.Use
 	}
 
 	return t.Commit()
+}
+
+func (p *PostgresDB) GetUserWithTeamByID(userID string) (models.User, string, error) {
+	r := p.db.QueryRow("SELECT user_id, users.name, is_active, users.team_id, teams.name FROM users INNER JOIN teams ON users.team_id=teams.team_id WHERE user_id=$1", userID)
+
+	var user models.User
+	var teamName string
+
+	if err := r.Scan(&user.ID, &user.Name, &user.IsActive, &user.GroupID, &teamName); err != nil {
+		return models.User{}, "", err
+	}
+	return user, teamName, nil
+}
+
+func (p *PostgresDB) UpdateUserActivity(userID string, isActive bool) error {
+	_, err := p.db.Exec("UPDATE users SET is_active=$1 WHERE user_id=$2", isActive, userID)
+	return err
+}
+
+func (p *PostgresDB) GetPRByID(pRID string) (models.PullRequest, error) {
+	r := p.db.QueryRow("SELECT pr_id, name, author_id, pr_status, merged_at FROM pull_requests WHERE pr_id=$1", pRID)
+
+	var pr models.PullRequest
+
+	if err := r.Scan(&pr.ID, &pr.Name, &pr.AuthorID, &pr.Status, &pr.MergedAt); err != nil {
+		return models.PullRequest{}, err
+	}
+	return pr, nil
+}
+
+func (p *PostgresDB) GetActiveUsersInTeamExcAuthor(teamID int64, userID string) ([]models.User, error) {
+	r, err := p.db.Query(`WITH pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
+ 		SELECT user_id, name, is_active, team_id FROM users LEFT JOIN pr_count ON users.user_id=pr_count.reviewer_id
+ 		WHERE user_id!=$1 AND is_active AND team_id=$2 ORDER BY cnt LIMIT 2;`,
+		userID, teamID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	reviewers := make([]models.User, 0, 2)
+
+	for r.Next() {
+		var user models.User
+		if err := r.Scan(&user.ID, &user.Name, &user.IsActive, &user.GroupID); err != nil {
+			return nil, err
+		}
+
+		reviewers = append(reviewers, user)
+	}
+
+	return reviewers, nil
+}
+
+func (p *PostgresDB) InsertPRInTransaction(pr models.PullRequest) error {
+	t, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = t.Exec("INSERT INTO pull_requests (pr_id, name, author_id, pr_status) VALUES ($1, $2, $3, $4)", pr.ID, pr.Name, pr.AuthorID, pr.Status)
+	if err != nil {
+		t.Rollback()
+		return err
+	}
+
+	for _, reviewer := range pr.Reviewers {
+		_, err := t.Exec("INSERT INTO pull_requests_reviewers (pr_id, reviewer_id) VALUES ($1, $2)", pr.ID, reviewer.ID)
+		if err != nil {
+			t.Rollback()
+			return err
+		}
+	}
+
+	return t.Commit()
+}
+
+func (p *PostgresDB) GetReviewersByPRID(pRID string) ([]string, error) {
+	r, err := p.db.Query("SELECT reviewer_id FROM pull_requests_reviewers WHERE pr_id=$1", pRID)
+	if err != nil {
+		return nil, err
+	}
+	reviewersID := make([]string, 0, 2)
+
+	for r.Next() {
+		var userID string
+		if err := r.Scan(&userID); err != nil {
+			return nil, err
+		}
+		reviewersID = append(reviewersID, userID)
+	}
+
+	return reviewersID, nil
+}
+
+func (p *PostgresDB) SetMergedStatusPR(pRID string) (time.Time, error) {
+	r := p.db.QueryRow(`UPDATE pull_requests SET pr_status=$1, merged_at=NOW() WHERE pr_id=$2 RETURNING merged_at`, models.PRStatusMerged, pRID)
+
+	var mergedAt time.Time
+	if err := r.Scan(&mergedAt); err != nil {
+		return time.Time{}, err
+	}
+
+	return mergedAt, nil
+}
+
+func (p *PostgresDB) FoundAvailableReviewerPR(pRID string, reviewersID []string, authorID string) (string, error) {
+	r := p.db.QueryRow(`WITH team AS (SELECT team_id FROM users u INNER JOIN pull_requests pr ON pr.author_id=u.user_id WHERE pr.pr_id=$1),
+	pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
+	SELECT user_id FROM users u INNER JOIN team t ON u.team_id=t.team_id 
+	LEFT JOIN pr_count prc ON prc.reviewer_id=u.user_id 
+	WHERE is_active AND user_id != ALL($2) AND user_id != $3 ORDER BY cnt LIMIT 1`, pRID, pq.Array(reviewersID), authorID)
+
+	var reviewerID string
+	if err := r.Scan(&reviewerID); err != nil {
+		return "", err
+	}
+	return reviewerID, nil
+}
+
+func (p *PostgresDB) SwapReviewerInPR(pRID, oldReviewerID, newReviewerID string) error {
+	_, err := p.db.Exec(`UPDATE pull_requests_reviewers SET reviewer_id=$1 WHERE pr_id=$2 AND reviewer_id=$3`, newReviewerID, pRID, oldReviewerID)
+	return err
+}
+
+func (p *PostgresDB) GetPRByReviewerID(reviewerID string) ([]models.PullRequest, error) {
+	r, err := p.db.Query(`SELECT pr.pr_id, name, author_id, pr_status FROM pull_requests_reviewers prr 
+	INNER JOIN pull_requests pr 
+	ON prr.pr_id=pr.pr_id
+	WHERE reviewer_id=$1`, reviewerID)
+	if err != nil {
+		return nil, err
+	}
+	pullrequests := make([]models.PullRequest, 0, 1)
+
+	for r.Next() {
+		var pr models.PullRequest
+		if err := r.Scan(&pr.ID, &pr.Name, &pr.AuthorID, &pr.Status); err != nil {
+			return nil, err
+		}
+		pullrequests = append(pullrequests, pr)
+	}
+
+	return pullrequests, nil
 }

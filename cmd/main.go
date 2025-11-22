@@ -36,6 +36,13 @@ func main() {
 	r.Post("/team/add", h.AddTeam)
 	r.Get("/team/get", h.GetTeam)
 
+	r.Post("/users/setIsActive", h.SetUserIsActive)
+	r.Get("/users/getReview", h.GetReview)
+
+	r.Post("/pullRequest/create", h.CreatePR)
+	r.Post("/pullRequest/merge", h.MergePR)
+	r.Post("/pullRequest/reassign", h.ReassignPR)
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 

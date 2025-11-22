@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type PRStatus string
 
 const (
@@ -20,9 +22,10 @@ type Team struct {
 }
 
 type PullRequest struct {
-	ID        string
-	Name      string
-	AuthorID  int64
-	Status    PRStatus
-	Reviewers []User
+	ID        string    `json:"pull_request_id"`
+	Name      string    `json:"pull_request_name"`
+	AuthorID  string    `json:"author_id"`
+	Status    PRStatus  `json:"status"`
+	Reviewers []User    `json:"-"`
+	MergedAt  *time.Time `json:"-"`
 }
