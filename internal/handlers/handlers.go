@@ -266,7 +266,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 		resp.PR.Reviewers = append(resp.PR.Reviewers, u.ID)
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 }
 
