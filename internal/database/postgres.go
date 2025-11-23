@@ -388,9 +388,9 @@ func (p *PostgresDB) UpdateUsersActivityInTeam(ctx context.Context, teamID int64
 
 func (p *PostgresDB) UpdateUsersActivityByID(ctx context.Context, usersSet map[string]struct{}) ([]models.User, map[string]struct{}, error) {
 	userIDs := make([]string, 0, len(usersSet))
-    for userID := range usersSet {
-        userIDs = append(userIDs, userID)
-    }
+	for userID := range usersSet {
+		userIDs = append(userIDs, userID)
+	}
 	rows, err := p.db.QueryContext(ctx, "UPDATE users SET is_active=FALSE WHERE user_id = ANY($1) RETURNING user_id, name, is_active", pq.Array(userIDs))
 	if err != nil {
 		return nil, nil, err
@@ -407,4 +407,31 @@ func (p *PostgresDB) UpdateUsersActivityByID(ctx context.Context, usersSet map[s
 	}
 
 	return users, usersSet, nil
+}
+
+func (p *PostgresDB) FoundAvailableReviewerPRAndSwapReviewerInPR(ctx context.Context, pRID string, reviewersID []string, authorID string, oldReviewerID string) (string, error) {
+	t, err := p.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	r := t.QueryRowContext(ctx, `WITH team AS (SELECT team_id FROM users u INNER JOIN pull_requests pr ON pr.author_id=u.user_id WHERE pr.pr_id=$1),
+	pr_count AS (SELECT reviewer_id, COUNT(*) AS cnt FROM pull_requests_reviewers GROUP BY reviewer_id)
+	SELECT user_id FROM users u INNER JOIN team t ON u.team_id=t.team_id 
+	LEFT JOIN pr_count prc ON prc.reviewer_id=u.user_id 
+	WHERE is_active AND user_id != ALL($2) AND user_id != $3 ORDER BY cnt LIMIT 1`, pRID, pq.Array(reviewersID), authorID)
+
+	var newReviewerID string
+	if err := r.Scan(&newReviewerID); err != nil {
+		t.Rollback()
+		return "", err
+	}
+
+	_, err = p.db.ExecContext(ctx, `UPDATE pull_requests_reviewers SET reviewer_id=$1 WHERE pr_id=$2 AND reviewer_id=$3`, newReviewerID, pRID, oldReviewerID)
+	if err != nil {
+		t.Rollback()
+		return "", err
+	}
+	err = t.Commit()
+	return newReviewerID, err
 }

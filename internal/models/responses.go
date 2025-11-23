@@ -77,7 +77,7 @@ type GetStatsTeamsResponse struct {
 }
 
 type GetStatsPRsResponse struct {
-	PRStats map[string]int64 `json:"statistic"`
+	PRStats map[string]int64 `json:"statistic_count_reviewers"`
 }
 
 type DeactivateAllUsersInTeamResponse struct {

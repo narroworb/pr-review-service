@@ -35,6 +35,7 @@ type DatabaseInterface interface {
 	GetCountReviewerStatsByPR(context.Context) (map[string]int64, error)
 	UpdateUsersActivityInTeam(context.Context, int64) ([]models.User, error)
 	UpdateUsersActivityByID(context.Context, map[string]struct{}) ([]models.User, map[string]struct{}, error)
+	FoundAvailableReviewerPRAndSwapReviewerInPR(context.Context, string, []string, string, string) (string, error)
 }
 
 type HandlersRepo struct {
@@ -379,20 +380,13 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	availableReviewerID, err := h.db.FoundAvailableReviewerPR(ctx, req.PRID, resp.PR.Reviewers, resp.PR.AuthorID)
+	availableReviewerID, err := h.db.FoundAvailableReviewerPRAndSwapReviewerInPR(ctx, req.PRID, resp.PR.Reviewers, resp.PR.AuthorID, req.OldReviewerID)
 	if err == sql.ErrNoRows {
 		writeError(w, "NO_CANDIDATE", "no active replacement candidate in team", http.StatusConflict)
 		return
 	}
 	if err != nil {
-		log.Printf("error in found available reviewer in handler /pullRequest/reassign: %v", err)
-		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
-		return
-	}
-
-	err = h.db.SwapReviewerInPR(ctx, req.PRID, req.OldReviewerID, availableReviewerID)
-	if err != nil {
-		log.Printf("error in update reviewer in handler /pullRequest/reassign: %v", err)
+		log.Printf("error in found and swap reviewer in handler /pullRequest/reassign: %v", err)
 		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
 		return
 	}
