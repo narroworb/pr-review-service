@@ -53,7 +53,7 @@ func writeError(w http.ResponseWriter, code, message string, statusCode int) {
 	var e models.ErrorResponse
 	e.Error.Code = code
 	e.Error.Message = message
-	json.NewEncoder(w).Encode(e)
+	_ = json.NewEncoder(w).Encode(e)
 }
 
 func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +127,7 @@ func (h *HandlersRepo) AddTeam(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.AddTeamResponse{Team: req})
+	_ = json.NewEncoder(w).Encode(models.AddTeamResponse{Team: req})
 }
 
 func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +162,7 @@ func (h *HandlersRepo) GetTeam(w http.ResponseWriter, r *http.Request) {
 	resp.Team.Members = members
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +194,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 
 	if user.IsActive == req.IsActive {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *HandlersRepo) SetUserIsActive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
@@ -273,7 +273,7 @@ func (h *HandlersRepo) CreatePR(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
@@ -311,7 +311,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	if pr.Status == models.PRStatusMerged {
 		resp.PR.MergedAt = *pr.MergedAt
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -324,7 +324,7 @@ func (h *HandlersRepo) MergePR(w http.ResponseWriter, r *http.Request) {
 	resp.PR.Status = models.PRStatusMerged
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +399,7 @@ func (h *HandlersRepo) ReassignPR(w http.ResponseWriter, r *http.Request) {
 	resp.ReplacedBy = availableReviewerID
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
@@ -436,7 +436,7 @@ func (h *HandlersRepo) GetReview(w http.ResponseWriter, r *http.Request) {
 	resp.PR = prs
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) GetStatsByUsers(w http.ResponseWriter, r *http.Request) {
@@ -454,7 +454,7 @@ func (h *HandlersRepo) GetStatsByUsers(w http.ResponseWriter, r *http.Request) {
 	var resp models.GetStatsUsersResponse
 	resp.PRStats = stats
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) GetStatsByTeams(w http.ResponseWriter, r *http.Request) {
@@ -472,7 +472,7 @@ func (h *HandlersRepo) GetStatsByTeams(w http.ResponseWriter, r *http.Request) {
 	var resp models.GetStatsTeamsResponse
 	resp.PRStats = stats
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) GetStatsByPRs(w http.ResponseWriter, r *http.Request) {
@@ -492,7 +492,7 @@ func (h *HandlersRepo) GetStatsByPRs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) DeactivateAllUsersInTeam(w http.ResponseWriter, r *http.Request) {
@@ -534,7 +534,7 @@ func (h *HandlersRepo) DeactivateAllUsersInTeam(w http.ResponseWriter, r *http.R
 	resp.Users = users
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (h *HandlersRepo) DeactivateUsersByID(w http.ResponseWriter, r *http.Request) {
@@ -574,5 +574,5 @@ func (h *HandlersRepo) DeactivateUsersByID(w http.ResponseWriter, r *http.Reques
 	resp.NotFoundUsers = req.UserNames
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }

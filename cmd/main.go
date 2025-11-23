@@ -23,11 +23,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("error in creation db: %v", err)
 	}
-	defer db.Close()
 	log.Println("Connection to Postgres established")
 	err = db.RunMigrations()
 	if err != nil {
-		log.Fatalf("error in migrations: %v", err)
+		log.Printf("error in migrations: %v", err)
+		os.Exit(1)
 	}
 	log.Println("Migrations to Postgres applied")
 
@@ -66,4 +66,5 @@ func main() {
 	<-stop
 
 	log.Println("shutting down: stopping to accept new requests...")
+	db.Close()
 }

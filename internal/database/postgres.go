@@ -31,7 +31,7 @@ func NewPostgresDB(dsn string) (*PostgresDB, error) {
 }
 
 func (p *PostgresDB) Close() {
-	p.db.Close()
+	_ = p.db.Close()
 }
 
 func (p *PostgresDB) RunMigrations() error {
@@ -120,14 +120,14 @@ func (p *PostgresDB) InsertTeamInTransaction(ctx context.Context, teamName strin
 	r := t.QueryRowContext(ctx, "INSERT INTO teams (name) VALUES ($1) RETURNING team_id", teamName)
 	var teamID int64
 	if err := r.Scan(&teamID); err != nil {
-		t.Rollback()
+		_ = t.Rollback()
 		return err
 	}
 
 	for _, user := range users {
 		_, err := t.ExecContext(ctx, "INSERT INTO users (user_id, name, is_active, team_id) VALUES ($1, $2, $3, $4)", user.ID, user.Name, user.IsActive, teamID)
 		if err != nil {
-			t.Rollback()
+			_ = t.Rollback()
 			return err
 		}
 	}
@@ -195,14 +195,14 @@ func (p *PostgresDB) InsertPRInTransaction(ctx context.Context, pr models.PullRe
 
 	_, err = t.ExecContext(ctx, "INSERT INTO pull_requests (pr_id, name, author_id, pr_status) VALUES ($1, $2, $3, $4)", pr.ID, pr.Name, pr.AuthorID, pr.Status)
 	if err != nil {
-		t.Rollback()
+		_ = t.Rollback()
 		return err
 	}
 
 	for _, reviewer := range pr.Reviewers {
 		_, err := t.ExecContext(ctx, "INSERT INTO pull_requests_reviewers (pr_id, reviewer_id) VALUES ($1, $2)", pr.ID, reviewer.ID)
 		if err != nil {
-			t.Rollback()
+			_ = t.Rollback()
 			return err
 		}
 	}
@@ -357,12 +357,12 @@ func (p *PostgresDB) GetCountReviewerStatsByPR(ctx context.Context) (map[string]
 	stats := make(map[string]int64)
 
 	for r.Next() {
-		var pr_id string
+		var prID string
 		var count int64
-		if err := r.Scan(&pr_id, &count); err != nil {
+		if err := r.Scan(&prID, &count); err != nil {
 			return nil, err
 		}
-		stats[pr_id] = count
+		stats[prID] = count
 	}
 
 	return stats, nil
@@ -423,13 +423,13 @@ func (p *PostgresDB) FoundAvailableReviewerPRAndSwapReviewerInPR(ctx context.Con
 
 	var newReviewerID string
 	if err := r.Scan(&newReviewerID); err != nil {
-		t.Rollback()
+		_ = t.Rollback()
 		return "", err
 	}
 
 	_, err = p.db.ExecContext(ctx, `UPDATE pull_requests_reviewers SET reviewer_id=$1 WHERE pr_id=$2 AND reviewer_id=$3`, newReviewerID, pRID, oldReviewerID)
 	if err != nil {
-		t.Rollback()
+		_ = t.Rollback()
 		return "", err
 	}
 	err = t.Commit()

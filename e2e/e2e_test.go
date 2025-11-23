@@ -43,7 +43,7 @@ func TestCreateTeamAndUsers(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	var teamResp map[string]map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&teamResp)
+	_ = json.NewDecoder(resp.Body).Decode(&teamResp)
 	assert.Equal(t, "e2e_team_"+now, teamResp["team"]["team_name"])
 	assert.Equal(t, 2, len(teamResp["team"]["members"].([]interface{})))
 }
@@ -59,7 +59,7 @@ func TestCreatePR(t *testing.T) {
 	assert.Equal(t, 201, resp.StatusCode)
 
 	var prResp map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&prResp)
+	_ = json.NewDecoder(resp.Body).Decode(&prResp)
 	pr := prResp["pr"].(map[string]interface{})
 	assigned := pr["assigned_reviewers"].([]interface{})
 	assert.True(t, len(assigned) <= 2)
@@ -83,6 +83,6 @@ func TestStatsPR(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	var teamResp map[string]map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&teamResp)
+	_ = json.NewDecoder(resp.Body).Decode(&teamResp)
 	assert.Equal(t, float64(1), teamResp["statistic_count_reviewers"]["pr-e2e-1_"+now])
 }
