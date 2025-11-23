@@ -40,7 +40,7 @@ docker-compose up --build
 - /team/deactivate
 - /users/deactivate
 
-Конфигурация API представлена в [api_config.yml](https://github.com/narroworb/pr-review-service/api_config.yml)
+Конфигурация API представлена в [api_config.yml](https://github.com/narroworb/pr-review-service/blob/main/api_config.yml)   
 
 ## Допущения
 
@@ -57,7 +57,7 @@ docker-compose up --build
 - smoke.js - быстрый и легкий тест (GET/POST проверка)
 - create_pr.js — нагрузка на создание PR 
 - reassign.js — нагрузка на переназначение ревьюеров
-- combined.js — смесь различных запросов
+- combined.js — смесь различных запросов   
 Загрузка тестовых данных
 ```bash
 docker-compose up
