@@ -89,4 +89,12 @@ docker run --rm -i --network host -v ${PWD}\loadtest:/loadtest -e BASE_URL=http:
 docker-compose up
 go test ./e2e -v
 ```
+## Конфигурация линтера
 
+В проекте используется `golangci-lint` для проверки кода на ошибки и соблюдение стиля.
+
+- Конфигурация хранится в `.golangci.yml`.
+- Включены линтеры: `govet`, `errcheck`, `staticcheck`, `gocritic`.
+- Запуск локально: `golangci-lint run -v`
+
+Цель: предотвращение багов и соблюдение стандартов кодирования Go.
