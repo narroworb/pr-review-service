@@ -58,6 +58,7 @@ docker-compose up --build
 - create_pr.js — нагрузка на создание PR 
 - reassign.js — нагрузка на переназначение ревьюеров
 - combined.js — смесь различных запросов   
+
 Загрузка тестовых данных
 ```bash
 docker-compose up
@@ -75,4 +76,17 @@ docker run --rm -i --network host -v ${PWD}\loadtest:/loadtest -e BASE_URL=http:
 ![Combined test](screens/4.png)
 
 Все тесты прошли по заданным показателям: RPS (на скринах поле http_reqs) — 5, SLI времени ответа (на скринах поле http_req_duration) — 300 мс, SLI успешности (на скринах поле checks_succeeded или 100%-http_req_failed (там, где не установлены чеккеры)) — 99.9%.  
+
+### E2E тестирование 
+
+В пакете e2e реализовано e2e-тестирование (последовательные операции создания команды и пользователей, получения информации о команде, создания Pull Request, merge Pull Request, переназначения после мержа, получения статистики по pull request)   
+
+Все тесты проходят:   
+![E2E test](screens/5.png)   
+
+Запуск тестов:   
+```bash
+docker-compose up
+go test ./e2e -v
+```
 
