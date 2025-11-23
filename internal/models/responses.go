@@ -79,3 +79,13 @@ type GetStatsTeamsResponse struct {
 type GetStatsPRsResponse struct {
 	PRStats map[string]int64 `json:"statistic"`
 }
+
+type DeactivateAllUsersInTeamResponse struct {
+	TeamName string `json:"team_name"`
+	Users    []User `json:"users"`
+}
+
+type DeactivateUsersByIDResponse struct {
+	Users         []User   `json:"users"`
+	NotFoundUsers []string `json:"not_found_users"`
+}

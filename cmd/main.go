@@ -39,9 +39,11 @@ func main() {
 
 	r.Post("/team/add", h.AddTeam)
 	r.Get("/team/get", h.GetTeam)
+	r.Post("/team/deactivate", h.DeactivateAllUsersInTeam)
 
 	r.Post("/users/setIsActive", h.SetUserIsActive)
 	r.Get("/users/getReview", h.GetReview)
+	r.Post("/users/deactivate", h.DeactivateUsersByID)
 
 	r.Post("/pullRequest/create", h.CreatePR)
 	r.Post("/pullRequest/merge", h.MergePR)

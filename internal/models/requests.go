@@ -28,3 +28,11 @@ type ReassignPRRequest struct {
 	PRID          string `json:"pull_request_id"`
 	OldReviewerID string `json:"old_reviewer_id"`
 }
+
+type DeactivateAllUsersInTeamRequest struct {
+	TeamName string `json:"team_name"`
+}
+
+type DeactivateUsersByIDRequest struct {
+	UserNames []string `json:"user_names"`
+}

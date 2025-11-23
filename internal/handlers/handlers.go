@@ -33,6 +33,8 @@ type DatabaseInterface interface {
 	GetCountPRStatsByUser(context.Context) ([]models.UserStats, error)
 	GetCountPRStatsByTeam(context.Context) ([]models.TeamStats, error)
 	GetCountReviewerStatsByPR(context.Context) (map[string]int64, error)
+	UpdateUsersActivityInTeam(context.Context, int64) ([]models.User, error)
+	UpdateUsersActivityByID(context.Context, map[string]struct{}) ([]models.User, map[string]struct{}, error)
 }
 
 type HandlersRepo struct {
@@ -494,6 +496,88 @@ func (h *HandlersRepo) GetStatsByPRs(w http.ResponseWriter, r *http.Request) {
 	resp := models.GetStatsPRsResponse{
 		PRStats: stats,
 	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *HandlersRepo) DeactivateAllUsersInTeam(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+
+	var req models.DeactivateAllUsersInTeamRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
+		return
+	}
+
+	team, err := h.db.GetTeamByName(ctx, req.TeamName)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in get team in handler /team/add: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+	if err == sql.ErrNoRows {
+		writeError(w, "TEAM_NOT_FOUND", fmt.Sprintf("there is no team with team_name: %s", req.TeamName), http.StatusNotFound)
+		return
+	}
+
+	var resp models.DeactivateAllUsersInTeamResponse
+	resp.TeamName = team.Name
+
+	users, err := h.db.UpdateUsersActivityInTeam(ctx, team.ID)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in update user in handler /users/setIsActive: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+	if err == sql.ErrNoRows {
+		writeError(w, "NO_USERS_IN_TEAM", fmt.Sprintf("there is no users in team with team_name: %s", req.TeamName), http.StatusConflict)
+		return
+	}
+	resp.Users = users
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *HandlersRepo) DeactivateUsersByID(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ctx := r.Context()
+
+	var req models.DeactivateUsersByIDRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, "BAD_REQUEST", "invalid json body of request", http.StatusBadRequest)
+		return
+	}
+
+	mapUsers := make(map[string]struct{})
+	for _, userName := range req.UserNames {
+		mapUsers[userName] = struct{}{}
+	}
+
+	users, notFoundUsers, err := h.db.UpdateUsersActivityByID(ctx, mapUsers)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("error in update user in handler /users/setIsActive: %v", err)
+		writeError(w, "SERVER_ERROR", "try again later", http.StatusInternalServerError)
+		return
+	}
+
+	var resp models.DeactivateUsersByIDResponse
+
+	for i := 0; i < len(req.UserNames); i++ {
+		if _, ok := notFoundUsers[req.UserNames[i]]; !ok {
+			req.UserNames = append(req.UserNames[:i], req.UserNames[i+1:]...)
+			i--
+		}
+	}
+
+	resp.Users = users
+	resp.NotFoundUsers = req.UserNames
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)

@@ -367,3 +367,44 @@ func (p *PostgresDB) GetCountReviewerStatsByPR(ctx context.Context) (map[string]
 
 	return stats, nil
 }
+
+func (p *PostgresDB) UpdateUsersActivityInTeam(ctx context.Context, teamID int64) ([]models.User, error) {
+	rows, err := p.db.QueryContext(ctx, "UPDATE users SET is_active=FALSE WHERE team_id=$1 RETURNING user_id, name, is_active", teamID)
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]models.User, 0, 1)
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.Name, &u.IsActive); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+
+	return users, nil
+}
+
+func (p *PostgresDB) UpdateUsersActivityByID(ctx context.Context, usersSet map[string]struct{}) ([]models.User, map[string]struct{}, error) {
+	userIDs := make([]string, 0, len(usersSet))
+    for userID := range usersSet {
+        userIDs = append(userIDs, userID)
+    }
+	rows, err := p.db.QueryContext(ctx, "UPDATE users SET is_active=FALSE WHERE user_id = ANY($1) RETURNING user_id, name, is_active", pq.Array(userIDs))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	users := make([]models.User, 0, len(usersSet))
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.Name, &u.IsActive); err != nil {
+			return nil, nil, err
+		}
+		users = append(users, u)
+		delete(usersSet, u.ID)
+	}
+
+	return users, usersSet, nil
+}
