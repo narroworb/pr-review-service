@@ -13,7 +13,7 @@ https://github.com/avito-tech/tech-internship/blob/main/Tech%20Internships/Backe
 
 ```bash
 git clone https://github.com/narroworb/pr-review-service.git
-cd /pr-review-service
+cd pr-review-service
 docker-compose up --build
 ```
 
