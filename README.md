@@ -67,6 +67,7 @@ docker exec -i prservice_postgres psql prservice -U pruser < ./test_data/insert_
 Запуск тестов 
 ```bash
 docker-compose up
+docker pull grafana/k6
 docker run --rm -i --network host -v ${PWD}\loadtest:/loadtest -e BASE_URL=http://localhost:8080 grafana/k6 run /loadtest/<название тестового файла>
 ```
 Результаты тестов
