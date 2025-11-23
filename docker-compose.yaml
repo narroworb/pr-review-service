@@ -2,6 +2,7 @@ version: "3.8"
 services:
   postgres:
     image: postgres:15
+    container_name: prservice_postgres
     environment:
       POSTGRES_DB: prservice
       POSTGRES_USER: pruser
@@ -17,6 +18,7 @@ services:
       retries: 10
   app:
     build: .
+    container_name: prservice_app
     depends_on:
       postgres:
         condition: service_healthy

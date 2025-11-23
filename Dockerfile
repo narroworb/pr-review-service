@@ -13,6 +13,7 @@ WORKDIR /root/
 
 COPY --from=build /app/app .
 COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/test_data ./test_data
 
 ENV POSTGRES_DSN=${POSTGRES_DSN}
 
